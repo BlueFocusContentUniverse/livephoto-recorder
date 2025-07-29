@@ -1,0 +1,24 @@
+{
+  "name": "livephoto-demo",
+  "version": "1.0.0",
+  "description": "Live Photo demo using Apple's LivePhotosKit JS",
+  "main": "index.html",
+  "scripts": {
+    "start": "python -m http.server 8080",
+    "serve": "python -m http.server 8080",
+    "dev": "python -m http.server 8080"
+  },
+  "keywords": [
+    "livephoto",
+    "apple",
+    "javascript",
+    "demo",
+    "web"
+  ],
+  "author": "BlueFocus",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {
+    "livephotoskit": "^1.0.0"
+  }
+}
