@@ -1,135 +1,76 @@
-# Live Photo Demo - LivePhotosKit JS
+# LivePhoto Recorder
 
-A comprehensive demonstration of Apple's LivePhotosKit JS library for playing Live Photos on the web.
+An Electron application for playing and recording LivePhoto content with desktop capture functionality.
 
-## 🎬 Features
+## Features
 
-- **Upload Your Own Live Photos**: Select JPG and MOV file pairs from your device
-- **Multiple Implementation Examples**: Declarative HTML and JavaScript API approaches
-- **Interactive Controls**: Play, pause, stop, toggle, and seek functionality
-- **Event Handling Demo**: Real-time event logging and error handling
-- **Playback Styles**: Demonstration of HINT and FULL playback modes
-- **Cross-Platform Support**: Works on iOS, macOS, Android, and Windows browsers
+- **LivePhoto Playback**: Play LivePhoto content using LivePhotosKit
+- **Desktop Capture Recording**: Record the LivePhoto player content for 5 seconds
+- **Cross-platform**: Works on Windows, macOS, and Linux
 
-## 🚀 Quick Start
+## Desktop Capture Recording
 
-1. Open `index.html` in a web browser
-2. Upload your Live Photo files (JPG photo + MOV video)
-3. Explore the different demo examples
-4. Test the interactive controls
+The application includes a desktop capture feature that allows you to record the LivePhoto player content for 5 seconds. This feature uses Electron's `desktopCapturer` API to capture the window content and save it as a video file.
 
-## 📱 How to Get Live Photos
+### How to Use
 
-### From iOS Device
-1. Take Live Photos using your iPhone or iPad camera
-2. Export using one of the methods below
+1. Load a LivePhoto by selecting both image and video files
+2. Click the "Record 5s Video" button to start recording
+3. The recording will automatically stop after 5 seconds
+4. The video file will be saved to your system's Videos folder
+5. You can also manually stop the recording using the "Stop Recording" button
 
-### macOS Export
-1. Connect your iOS device to your Mac
-2. Import photos into the Photos application
-3. Select the Live Photo you want to export
-4. Use **File → Export → Export Unmodified Original**
+### Technical Details
 
-### Windows 10 Export
-1. Install iTunes for Windows
-2. Connect your iOS device to your PC
-3. Open File Explorer (Windows Key + E)
-4. Navigate to: **Your Device → Internal Storage → DCIM**
-5. Copy both the JPG and MOV files to your computer
+- **Recording Format**: WebM with VP9 codec
+- **Duration**: 5 seconds (configurable)
+- **Output Location**: System Videos folder
+- **File Naming**: `livephoto-recording-{timestamp}.webm`
 
-### File Structure
-Live Photos consist of two files:
-- **JPG file**: The still photo
-- **MOV file**: The video component (moments before and after the photo)
+### Requirements
 
-## 🛠️ Technical Implementation
+- Electron 20+ (for desktopCapturer API)
+- Node.js 16+
+- LivePhotosKit for LivePhoto playback
 
-### Declarative HTML Approach
-```html
-<div 
-    data-live-photo
-    data-photo-src="photo.jpg"
-    data-video-src="video.mov"
-    style="width: 320px; height: 320px">
-</div>
+## Development
+
+### Installation
+
+```bash
+npm install
 ```
 
-### JavaScript API Approach
-```javascript
-const player = LivePhotosKit.Player();
-player.photoSrc = 'photo.jpg';
-player.videoSrc = 'video.mov';
-player.play();
+### Running the Application
+
+```bash
+npm run dev
 ```
 
-### Event Handling
-```javascript
-player.addEventListener('canplay', evt => console.log('ready'));
-player.addEventListener('error', evt => console.log('error', evt));
-player.addEventListener('ended', evt => console.log('finished'));
+### Building
+
+```bash
+npm run build
 ```
 
-## 🌐 Browser Compatibility
+## Architecture
 
-| Platform | Supported Browsers |
-|----------|-------------------|
-| iOS | Safari, Chrome |
-| macOS | Safari, Chrome, Firefox |
-| Android | Chrome (beta) |
-| Windows | Chrome, Firefox, Edge, IE 11 |
+The desktop capture functionality is implemented using:
 
-## 📚 LivePhotosKit JS Documentation
+1. **Preload Script** (`src/main/preload.ts`): Exposes IPC methods to the renderer process
+2. **Main Process** (`src/main/main.ts`): Handles desktop capture using `desktopCapturer` and `MediaRecorder`
+3. **Renderer Process** (`src/renderer/components/LivePhotoPlayer.tsx`): UI for triggering recordings and displaying status
 
-- **CDN**: `https://cdn.apple-livephotoskit.com/lpk/1/livephotoskit.js`
-- **NPM**: `npm install --save livephotoskit`
-- **Official Docs**: https://developer.apple.com/documentation/livephotoskitjs
+### IPC Communication
 
-## 🎯 Demo Sections
+- `start-recording`: Initiates desktop capture recording
+- `stop-recording`: Manually stops recording
+- `recording-complete`: Sent when recording is finished and file is saved
+- `recording-error`: Sent when recording encounters an error
 
-1. **Upload Section**: Upload and preview your own Live Photos
-2. **Declarative HTML**: Simple HTML-based implementation
-3. **JavaScript API**: Programmatic control and manipulation
-4. **Event Handling**: Comprehensive event logging and error handling
-5. **Playback Styles**: Different playback modes (HINT vs FULL)
+## Security Considerations
 
-## ⚡ Performance Tips
-
-- Downsize large assets to improve performance and reduce bandwidth
-- Use `data-proactively-loads-video="false"` to control video preloading
-- Specify explicit width and height for better loading experience
-- Consider using placeholder images while assets load
-
-## 🔧 Customization
-
-The demo includes:
-- Responsive design for mobile and desktop
-- Modern CSS with gradients and animations
-- Comprehensive error handling
-- Real-time status updates
-- Interactive control panels
-
-## 📖 API Reference
-
-### Player Methods
-- `play()`: Start playback
-- `pause()`: Pause playback
-- `stop()`: Stop and reset playback
-- `toggle()`: Toggle play/pause state
-
-### Player Properties
-- `photoSrc`: URL to the JPG photo
-- `videoSrc`: URL to the MOV video
-- `currentTime`: Current playback position
-- `duration`: Total duration of the Live Photo
-- `playbackStyle`: HINT or FULL playback mode
-
-### Events
-- `canplay`: Player is ready for playback
-- `error`: Loading or playback error occurred
-- `ended`: Playback completed
-- `videoload`: Video component loaded
-- `photoload`: Photo component loaded
-
-## 📄 License
-
-This project is open source and available under the [MIT License](LICENSE).
+- Context isolation is enabled
+- Node integration is disabled
+- Only necessary APIs are exposed through the preload script
+- File saving is restricted to the system Videos folder
