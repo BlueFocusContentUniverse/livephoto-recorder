@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import React, { useState } from "react";
+
 import { LivePhotoPlayer } from "../components/LivePhotoPlayer";
+import { VideoAnalyzer } from "../components/VideoAnalyzer";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -36,29 +38,43 @@ function Index() {
     console.log("LivePhoto stopped playing");
   };
 
+  const handleThumbnailGenerated = (result: {
+    thumbnailBase64: string;
+    thumbnailPath: string;
+    mimeType: string;
+  }) => {
+    console.log("Thumbnail generated!", result);
+
+    // Set the generated thumbnail as the image for LivePhoto
+    setImageUrl(`data:${result.mimeType};base64,${result.thumbnailBase64}`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          LivePhoto Player
+          实况照片播放器
         </h1>
         <p className="text-gray-600">
-          Select an image and video file to create a LivePhoto experience
+          选择图片和视频文件来创建实况照片体验，录制屏幕，或分析视频以找到最清晰的帧
         </p>
       </div>
+
+      {/* Video Analyzer */}
+      <VideoAnalyzer onThumbnailGenerated={handleThumbnailGenerated} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* File Selection */}
         <div className="space-y-4">
           <div className="bg-white p-6 rounded-lg shadow border">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              File Selection
+              文件选择
             </h2>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Image File
+                  选择图片文件
                 </label>
                 <input
                   type="file"
@@ -68,14 +84,14 @@ function Index() {
                 />
                 {selectedImage && (
                   <p className="mt-2 text-sm text-green-600">
-                    ✅ Selected: {selectedImage.name}
+                    ✅ 已选择: {selectedImage.name}
                   </p>
                 )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Video File
+                  选择视频文件
                 </label>
                 <input
                   type="file"
@@ -85,7 +101,7 @@ function Index() {
                 />
                 {selectedVideo && (
                   <p className="mt-2 text-sm text-green-600">
-                    ✅ Selected: {selectedVideo.name}
+                    ✅ 已选择: {selectedVideo.name}
                   </p>
                 )}
               </div>
@@ -95,13 +111,13 @@ function Index() {
           {/* File Previews */}
           <div className="bg-white p-6 rounded-lg shadow border">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              File Previews
+              文件预览
             </h3>
             <div className="grid grid-cols-2 gap-4">
               {imageUrl && (
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">
-                    Image Preview
+                    图片预览
                   </p>
                   <img
                     src={imageUrl}
@@ -113,7 +129,7 @@ function Index() {
               {videoUrl && (
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">
-                    Video Preview
+                    视频预览
                   </p>
                   <video
                     src={videoUrl}
@@ -129,7 +145,7 @@ function Index() {
         {/* LivePhoto Player */}
         <div className="bg-white p-6 rounded-lg shadow border">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            LivePhoto Player
+            实况照片播放器
           </h2>
           <LivePhotoPlayer
             imageUrl={imageUrl}

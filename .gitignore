@@ -93,3 +93,7 @@ typings/
 
 # Electron-Forge
 out/
+
+# ffmpeg
+ffmpeg/win
+!ffmpeg/Readme.md
