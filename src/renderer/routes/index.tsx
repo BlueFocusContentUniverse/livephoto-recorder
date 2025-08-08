@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import { LivePhotoPlayer } from "../components/LivePhotoPlayer";
+import { UploadsTable } from "../components/UploadsTable";
 import { VideoAnalyzer } from "../components/VideoAnalyzer";
+import { UploadedRecord } from "../types/uploads";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -13,6 +15,19 @@ function Index() {
   const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [uploads, setUploads] = useState<UploadedRecord[]>([]);
+
+  // Subscribe to uploaded recording events from main process
+  useEffect(() => {
+    const handler = (data: UploadedRecord) => {
+      setUploads((prev) => [data, ...prev]);
+    };
+    window.electronAPI?.onRecordingUploaded?.(handler);
+    return () => {
+      // remove all listeners for safety when this page unmounts
+      window.electronAPI?.removeAllListeners?.("recording-uploaded");
+    };
+  }, []);
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -59,6 +74,8 @@ function Index() {
           选择图片和视频文件来创建实况照片体验，录制屏幕，或分析视频以找到最清晰的帧
         </p>
       </div>
+
+      <UploadsTable uploads={uploads} />
 
       {/* Video Analyzer */}
       <VideoAnalyzer onThumbnailGenerated={handleThumbnailGenerated} />

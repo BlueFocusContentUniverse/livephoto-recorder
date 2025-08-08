@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 
 import { LivePhotoPlayer } from "./LivePhotoPlayer";
 
@@ -27,6 +27,10 @@ export const VideoAnalyzer: React.FC<VideoAnalyzerProps> = ({
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
   const [showLivePhotoPlayer, setShowLivePhotoPlayer] = useState(false);
 
+  // Keep an object URL for the thumbnail blob
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const currentThumbUrlRef = useRef<string | null>(null);
+
   useEffect(() => {
     const handleThumbnailComplete = (result: ThumbnailResult) => {
       setThumbnail(result);
@@ -42,6 +46,43 @@ export const VideoAnalyzer: React.FC<VideoAnalyzerProps> = ({
       window.electronAPI.removeAllListeners("thumbnail-complete");
     };
   }, [onThumbnailGenerated]);
+
+  // Convert thumbnail base64 to Blob and manage object URL lifecycle
+  useEffect(() => {
+    // Revoke previous URL before creating a new one
+    if (currentThumbUrlRef.current) {
+      URL.revokeObjectURL(currentThumbUrlRef.current);
+      currentThumbUrlRef.current = null;
+    }
+
+    if (!thumbnail) {
+      setThumbnailUrl(null);
+      return;
+    }
+
+    try {
+      const { thumbnailBase64, mimeType } = thumbnail;
+      const byteString = atob(thumbnailBase64);
+      const len = byteString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = byteString.charCodeAt(i);
+      const blob = new Blob([bytes], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      currentThumbUrlRef.current = url;
+      setThumbnailUrl(url);
+    } catch (e) {
+      console.error("Failed to create object URL for thumbnail:", e);
+      setThumbnailUrl(null);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (currentThumbUrlRef.current) {
+        URL.revokeObjectURL(currentThumbUrlRef.current);
+        currentThumbUrlRef.current = null;
+      }
+    };
+  }, [thumbnail]);
 
   const handleVideoSelect = async () => {
     try {
@@ -94,9 +135,7 @@ export const VideoAnalyzer: React.FC<VideoAnalyzerProps> = ({
   };
 
   // Prepare data URLs for LivePhotoPlayer
-  const imageUrl = thumbnail
-    ? `data:${thumbnail.mimeType};base64,${thumbnail.thumbnailBase64}`
-    : null;
+  const imageUrl = thumbnailUrl; // use object URL for the generated thumbnail
   const videoUrl = videoPreview;
 
   return (
@@ -194,11 +233,13 @@ export const VideoAnalyzer: React.FC<VideoAnalyzerProps> = ({
                   <p className="text-sm font-medium text-gray-700 mb-2">
                     生成的封面:
                   </p>
-                  <img
-                    src={`data:${thumbnail.mimeType};base64,${thumbnail.thumbnailBase64}`}
-                    alt="Generated thumbnail"
-                    className="w-full h-64 object-contain rounded border bg-white"
-                  />
+                  {imageUrl && (
+                    <img
+                      src={imageUrl}
+                      alt="Generated thumbnail"
+                      className="w-full h-64 object-contain rounded border bg-white"
+                    />
+                  )}
                 </div>
 
                 <div className="text-sm">

@@ -1,7 +1,9 @@
 import { createReadStream, existsSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import dotenv from "dotenv";
 import {
   app,
   BrowserWindow,
@@ -13,8 +15,16 @@ import {
   session,
 } from "electron";
 import started from "electron-squirrel-startup";
+import * as Minio from "minio";
 
 import { VideoAnalyzer } from "./videoAnalyzer.js";
+
+// Load .env into process.env
+// In packaged app, load from resourcesPath; in dev, load from project root
+const envPath = app.isPackaged
+  ? path.join(process.resourcesPath, ".env")
+  : path.join(process.cwd(), ".env");
+dotenv.config({ path: envPath });
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -186,7 +196,7 @@ const createExportWindow = (data: {
     ...(data.videoDuration && { videoDuration: data.videoDuration.toString() }),
   });
 
-  const livePhotoUrl = `/livephoto?${searchParams.toString()}`;
+  const livePhotoUrl = `#/livephoto?${searchParams.toString()}`;
 
   // Load the livephoto route
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -274,6 +284,109 @@ const setupIpcHandlers = () => {
       } catch (error) {
         console.error("Export window creation failed:", error);
         throw error;
+      }
+    },
+  );
+
+  // Handle upload-recording: save blob to S3 compatible storage and notify main window
+  ipcMain.handle(
+    "upload-recording",
+    async (
+      _event,
+      data: {
+        arrayBuffer: ArrayBuffer;
+        filename: string;
+        mimeType: string;
+        metadata?: Record<string, string>;
+      },
+    ) => {
+      try {
+        // Read credentials from env (or you can wire a settings UI later)
+        const endpoint = process.env.S3_ENDPOINT || "";
+        const accessKey = process.env.S3_ACCESS_KEY_ID || "";
+        const secretKey = process.env.S3_SECRET_ACCESS_KEY || "";
+        const bucket = process.env.S3_BUCKET || "";
+
+        if (!endpoint || !accessKey || !secretKey || !bucket) {
+          throw new Error(
+            "Missing S3 configuration. Please set S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET",
+          );
+        }
+
+        // Parse endpoint (host/port/SSL)
+        const url = new URL(endpoint);
+        const endPoint = url.hostname;
+        const port = url.port
+          ? parseInt(url.port, 10)
+          : url.protocol === "https:"
+            ? 443
+            : 80;
+        const useSSL = url.protocol === "https:";
+
+        const minioClient = new Minio.Client({
+          endPoint,
+          port,
+          useSSL,
+          accessKey,
+          secretKey,
+        });
+
+        const fileBuffer = Buffer.from(new Uint8Array(data.arrayBuffer));
+        // Optional directory/prefix inside the bucket
+        const rawPrefix = (process.env.S3_PREFIX || "").trim();
+        const normalizedPrefix = rawPrefix.replace(/^\/+|\/+$/g, ""); // remove leading/trailing '/'
+        const baseName = `${Date.now()}-${data.filename}`;
+        const objectKey = normalizedPrefix
+          ? `${normalizedPrefix}/${baseName}`
+          : baseName;
+
+        // Upload with content-type and optional metadata
+        const customMeta: Record<string, string> = Object.fromEntries(
+          Object.entries(data.metadata || {}).map(([k, v]) => [
+            `X-Amz-Meta-${k}`,
+            String(v),
+          ]),
+        );
+
+        await minioClient.putObject(
+          bucket,
+          objectKey,
+          fileBuffer,
+          fileBuffer.length,
+          {
+            "Content-Type": data.mimeType,
+            ...customMeta,
+          },
+        );
+
+        const fileId = objectKey; // now includes prefix if provided
+
+        // Build a public URL like `${endpoint}${bucket}/${prefix}${filename}`
+        const trimmedEndpoint = endpoint.replace(/\/+$/, "");
+        const publicUrl = `${trimmedEndpoint}/${bucket}/${objectKey}`;
+
+        // Notify main window (if available) so renderer can update its table
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("recording-uploaded", {
+            timestamp: new Date().toISOString(),
+            fileId,
+            filename: data.filename,
+            mimeType: data.mimeType,
+            endpoint,
+            bucket,
+            prefix: normalizedPrefix,
+            url: publicUrl,
+            machine: os.hostname(),
+          });
+        }
+
+        console.log("upload-recording success:", fileId);
+
+        return { success: true, fileId };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("upload-recording failed:", message);
+        return { success: false, error: message };
       }
     },
   );

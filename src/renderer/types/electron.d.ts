@@ -15,6 +15,19 @@ declare global {
           mimeType: string;
         }) => void,
       ) => void;
+      onRecordingUploaded: (
+        callback: (data: {
+          timestamp: string;
+          fileId: string;
+          filename: string;
+          mimeType: string;
+          endpoint: string;
+          bucket: string;
+          prefix?: string;
+          url?: string;
+          machine: string;
+        }) => void,
+      ) => void;
       removeAllListeners: (channel: string) => void;
       exportLivePhoto: (data: {
         imageUrl: string;
@@ -24,6 +37,12 @@ declare global {
         videoDuration?: number;
       }) => Promise<void>;
       closeExportWindow: () => Promise<{ success: boolean }>;
+      uploadRecording: (data: {
+        arrayBuffer: ArrayBuffer;
+        filename: string;
+        mimeType: string;
+        metadata?: Record<string, string>;
+      }) => Promise<{ success: boolean; fileId?: string; error?: string }>;
     };
   }
 }

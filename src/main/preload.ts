@@ -18,6 +18,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onThumbnailComplete: (callback: (result: ThumbnailResult) => void) => {
     ipcRenderer.on("thumbnail-complete", (_event, result) => callback(result));
   },
+  onRecordingUploaded: (
+    callback: (data: {
+      timestamp: string;
+      fileId: string;
+      filename: string;
+      mimeType: string;
+      endpoint: string;
+      bucket: string;
+      prefix?: string;
+      url?: string;
+      machine: string;
+    }) => void,
+  ) => {
+    ipcRenderer.on("recording-uploaded", (_event, payload) =>
+      callback(payload),
+    );
+  },
   removeAllListeners: (channel: string) => {
     ipcRenderer.removeAllListeners(channel);
   },
@@ -28,4 +45,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     imageHeight?: number;
   }) => ipcRenderer.invoke("export-live-photo", data),
   closeExportWindow: () => ipcRenderer.invoke("close-export-window"),
+  uploadRecording: (data: {
+    arrayBuffer: ArrayBuffer;
+    filename: string;
+    mimeType: string;
+    metadata?: Record<string, string>;
+  }) => ipcRenderer.invoke("upload-recording", data),
 });

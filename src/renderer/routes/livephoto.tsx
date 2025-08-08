@@ -95,18 +95,40 @@ function LivePhotoPage() {
         }
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const blob = new Blob(recordedChunksRef.current, {
           type: "video/webm",
         });
 
         // Create download link
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `livephoto-recording-${Date.now()}.webm`;
-        a.click();
-        URL.revokeObjectURL(url);
+        // const url = URL.createObjectURL(blob);
+        // const a = document.createElement("a");
+        // a.href = url;
+        // a.download = `livephoto-recording-${Date.now()}.webm`;
+        // a.click();
+        // URL.revokeObjectURL(url);
+
+        // Upload to S3-compatible OSS via main process
+        try {
+          if (window.electronAPI?.uploadRecording) {
+            const arrayBuffer = await blob.arrayBuffer();
+            const result = await window.electronAPI.uploadRecording({
+              arrayBuffer,
+              filename: `livephoto-recording-${Date.now()}.webm`,
+              mimeType: "video/webm",
+              metadata: {
+                source: "livephoto-export",
+              },
+            });
+            if (!result.success) {
+              console.error("Upload failed:", result.error);
+            } else {
+              console.log("Uploaded fileId:", result.fileId);
+            }
+          }
+        } catch (e) {
+          console.error("Upload error:", e);
+        }
 
         // Close the export window after recording stops
         if (window.electronAPI) {

@@ -11,7 +11,7 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     icon: "./images/icon",
-    extraResource: ["./ffmpeg/"],
+    extraResource: ["./ffmpeg/", ".env"],
     appVersion: "1.0.0",
   },
   rebuildConfig: {},

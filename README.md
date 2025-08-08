@@ -74,3 +74,22 @@ The desktop capture functionality is implemented using:
 - Node integration is disabled
 - Only necessary APIs are exposed through the preload script
 - File saving is restricted to the system Videos folder
+
+## Environment Configuration
+
+This app uploads recordings to an S3-compatible OSS. Configure credentials via a `.env` file at the project root. A sample template is provided in `.env.template`.
+
+Required keys:
+
+```
+S3_ENDPOINT=https://minio.example.com:9000
+S3_REGION=us-east-1
+S3_ACCESS_KEY_ID=your_access_key
+S3_SECRET_ACCESS_KEY=your_secret_key
+S3_BUCKET=your_bucket_name
+```
+
+Steps:
+- Copy `.env.template` to `.env`
+- Fill in your values
+- Restart the app so the main process reloads environment variables.
