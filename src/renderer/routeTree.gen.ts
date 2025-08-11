@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LivephotoRouteImport } from './routes/livephoto'
+import { Route as BatchGenerateRouteImport } from './routes/batch-generate'
 import { Route as IndexRouteImport } from './routes/index'
 
 const LivephotoRoute = LivephotoRouteImport.update({
   id: '/livephoto',
   path: '/livephoto',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BatchGenerateRoute = BatchGenerateRouteImport.update({
+  id: '/batch-generate',
+  path: '/batch-generate',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -25,27 +31,31 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/batch-generate': typeof BatchGenerateRoute
   '/livephoto': typeof LivephotoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/batch-generate': typeof BatchGenerateRoute
   '/livephoto': typeof LivephotoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/batch-generate': typeof BatchGenerateRoute
   '/livephoto': typeof LivephotoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/livephoto'
+  fullPaths: '/' | '/batch-generate' | '/livephoto'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/livephoto'
-  id: '__root__' | '/' | '/livephoto'
+  to: '/' | '/batch-generate' | '/livephoto'
+  id: '__root__' | '/' | '/batch-generate' | '/livephoto'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BatchGenerateRoute: typeof BatchGenerateRoute
   LivephotoRoute: typeof LivephotoRoute
 }
 
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/livephoto'
       fullPath: '/livephoto'
       preLoaderRoute: typeof LivephotoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/batch-generate': {
+      id: '/batch-generate'
+      path: '/batch-generate'
+      fullPath: '/batch-generate'
+      preLoaderRoute: typeof BatchGenerateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BatchGenerateRoute: BatchGenerateRoute,
   LivephotoRoute: LivephotoRoute,
 }
 export const routeTree = rootRouteImport

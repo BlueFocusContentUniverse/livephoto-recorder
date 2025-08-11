@@ -124,6 +124,12 @@ function LivePhotoPage() {
               console.error("Upload failed:", result.error);
             } else {
               console.log("Uploaded fileId:", result.fileId);
+              // Notify main window that export is complete
+              try {
+                await window.electronAPI.notifyExportComplete();
+              } catch (e) {
+                console.error("Failed to notify export completion:", e);
+              }
             }
           }
         } catch (e) {

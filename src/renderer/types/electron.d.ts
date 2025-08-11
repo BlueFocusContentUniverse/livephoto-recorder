@@ -3,6 +3,7 @@ declare global {
   interface Window {
     electronAPI: {
       selectVideoFile: () => Promise<string | null>;
+      selectVideoDirectory: () => Promise<string[]>;
       generateThumbnail: (videoPath: string) => Promise<{
         thumbnailBase64: string;
         thumbnailPath: string;
@@ -36,6 +37,8 @@ declare global {
         imageHeight?: number;
         videoDuration?: number;
       }) => Promise<void>;
+      onExportComplete: (callback: () => void) => void;
+      notifyExportComplete: () => Promise<{ success: boolean }>;
       closeExportWindow: () => Promise<{ success: boolean }>;
       uploadRecording: (data: {
         arrayBuffer: ArrayBuffer;

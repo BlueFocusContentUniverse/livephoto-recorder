@@ -13,6 +13,8 @@ export interface ThumbnailResult {
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld("electronAPI", {
   selectVideoFile: () => ipcRenderer.invoke("select-video-file"),
+  selectVideoDirectory: () =>
+    ipcRenderer.invoke("select-video-directory") as Promise<string[]>,
   generateThumbnail: (videoPath: string) =>
     ipcRenderer.invoke("generate-thumbnail", videoPath),
   onThumbnailComplete: (callback: (result: ThumbnailResult) => void) => {
@@ -45,6 +47,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     imageHeight?: number;
   }) => ipcRenderer.invoke("export-live-photo", data),
   closeExportWindow: () => ipcRenderer.invoke("close-export-window"),
+  onExportComplete: (callback: () => void) => {
+    ipcRenderer.on("export-complete", () => callback());
+  },
+  notifyExportComplete: () => ipcRenderer.invoke("export-complete"),
   uploadRecording: (data: {
     arrayBuffer: ArrayBuffer;
     filename: string;

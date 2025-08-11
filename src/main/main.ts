@@ -1,4 +1,5 @@
 import { createReadStream, existsSync } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -265,6 +266,51 @@ const setupIpcHandlers = () => {
     return result.filePaths[0];
   });
 
+  // Handle selecting a directory and returning all video files inside (non-recursive for now)
+  ipcMain.handle("select-video-directory", async () => {
+    if (!mainWindow) {
+      throw new Error("Main window not available");
+    }
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ["openDirectory"],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return [] as string[];
+    }
+
+    const dirPath = result.filePaths[0];
+    const entries = await readdir(dirPath);
+    const videoExtensions = new Set([
+      ".mp4",
+      ".avi",
+      ".mov",
+      ".mkv",
+      ".webm",
+      ".flv",
+      ".wmv",
+    ]);
+
+    const files: string[] = [];
+    for (const name of entries) {
+      const full = path.join(dirPath, name);
+      try {
+        const s = await stat(full);
+        if (s.isFile()) {
+          const ext = path.extname(name).toLowerCase();
+          if (videoExtensions.has(ext)) {
+            files.push(full);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return files;
+  });
+
   // Handle live photo export
   ipcMain.handle(
     "export-live-photo",
@@ -287,6 +333,14 @@ const setupIpcHandlers = () => {
       }
     },
   );
+
+  // Called from export window when export/recording successfully finished
+  ipcMain.handle("export-complete", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("export-complete");
+    }
+    return { success: true };
+  });
 
   // Handle upload-recording: save blob to S3 compatible storage and notify main window
   ipcMain.handle(
