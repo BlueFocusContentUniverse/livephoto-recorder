@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
+import { fixWebmDuration } from "@fix-webm-duration/fix";
 
 interface ScreenRecorderProps {
   onRecordingComplete?: (videoBlob: Blob) => void;
@@ -18,6 +19,7 @@ export const ScreenRecorder: React.FC<ScreenRecorderProps> = ({
   const [recordingTime, setRecordingTime] = useState(0);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number | null>(null);
 
   const startTimer = () => {
     timerRef.current = setInterval(() => {
@@ -109,25 +111,44 @@ export const ScreenRecorder: React.FC<ScreenRecorderProps> = ({
         }
       };
 
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, {
+      mediaRecorder.onstop = async () => {
+        const rawBlob = new Blob(recordedChunksRef.current, {
           type: "video/webm",
         });
 
-        if (onRecordingComplete) {
-          onRecordingComplete(blob);
-        }
+        try {
+          const durationMs = startTimeRef.current
+            ? Date.now() - startTimeRef.current
+            : undefined;
+          const fixedBlob = durationMs
+            ? await fixWebmDuration(rawBlob, durationMs)
+            : rawBlob;
 
-        // Create download link
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `screen-recording-${Date.now()}.webm`;
-        a.click();
-        URL.revokeObjectURL(url);
+          if (onRecordingComplete) {
+            onRecordingComplete(fixedBlob);
+          }
+
+          // Create download link
+          const url = URL.createObjectURL(fixedBlob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `screen-recording-${Date.now()}.webm`;
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          // Fallback to raw blob if fixing fails
+          const url = URL.createObjectURL(rawBlob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `screen-recording-${Date.now()}.webm`;
+          a.click();
+          URL.revokeObjectURL(url);
+          console.error("Failed to fix WebM duration:", e);
+        }
       };
 
       mediaRecorder.start(1000); // Capture data every second
+      startTimeRef.current = Date.now();
       setIsRecording(true);
       startTimer();
       setError(null);
@@ -142,6 +163,7 @@ export const ScreenRecorder: React.FC<ScreenRecorderProps> = ({
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       stopTimer();
+      startTimeRef.current = null;
     }
   }, [isRecording]);
 
@@ -203,8 +225,8 @@ export const ScreenRecorder: React.FC<ScreenRecorderProps> = ({
       )}
 
       <div className="text-sm text-gray-600 mt-4">
-        <p>• 点击"开始屏幕共享"选择要录制的内容</p>
-        <p>• 点击"开始录制"开始录制共享的屏幕</p>
+        <p>• 点击&ldquo;开始屏幕共享&rdquo;选择要录制的内容</p>
+        <p>• 点击&ldquo;开始录制&rdquo;开始录制共享的屏幕</p>
         <p>• 录制完成后会自动下载</p>
       </div>
     </div>

@@ -1,9 +1,18 @@
+import { randomUUID } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
-import os from "node:os";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import os, { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import AdmZip from "adm-zip";
 import dotenv from "dotenv";
 import {
   app,
@@ -39,6 +48,10 @@ if (started) {
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "local-video",
+    privileges: { bypassCSP: true, standard: true, stream: true },
+  },
+  {
+    scheme: "local-image",
     privileges: { bypassCSP: true, standard: true, stream: true },
   },
 ]);
@@ -453,6 +466,257 @@ const setupIpcHandlers = () => {
     }
     return { success: true };
   });
+
+  // Allow user to pick a .livp file
+  ipcMain.handle("select-livp-file", async () => {
+    if (!mainWindow) throw new Error("Main window not available");
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ["openFile"],
+      filters: [{ name: "LIVP", extensions: ["livp"] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  // Allow user to pick save path for .livp
+  ipcMain.handle(
+    "save-livp-dialog",
+    async (_event, suggestedName?: string): Promise<string | null> => {
+      if (!mainWindow) throw new Error("Main window not available");
+      const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: suggestedName || `livephoto-${Date.now()}.livp`,
+        filters: [{ name: "LIVP", extensions: ["livp"] }],
+      });
+      if (result.canceled || !result.filePath) return null;
+      return result.filePath;
+    },
+  );
+
+  // Encode image+video into a .livp (zip) container
+  ipcMain.handle(
+    "encode-livp",
+    async (
+      _event,
+      payload: {
+        image: { data: ArrayBuffer; extension: string };
+        video: { data: ArrayBuffer; extension: string };
+        outputPath?: string;
+      },
+    ) => {
+      try {
+        const outPath =
+          payload.outputPath ||
+          path.join(
+            os.tmpdir(),
+            `livephoto-${Date.now()}-${randomUUID()}.livp`,
+          );
+
+        const zip = new AdmZip();
+        const imgName = `image${normalizeExt(payload.image.extension)}`;
+        const vidName = `video${normalizeExt(payload.video.extension)}`;
+        zip.addFile(imgName, Buffer.from(payload.image.data));
+        zip.addFile(vidName, Buffer.from(payload.video.data));
+        zip.writeZip(outPath);
+        return {
+          success: true,
+          outputPath: outPath,
+          entries: { image: imgName, video: vidName },
+        };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("encode-livp failed:", message);
+        return { success: false, error: message };
+      }
+    },
+  );
+
+  // Decode a .livp into temp folder and return extracted file paths
+  ipcMain.handle("decode-livp", async (_event, livpPath: string) => {
+    try {
+      const buffer = await readFile(livpPath);
+      const zip = new AdmZip(buffer);
+      const entries = zip.getEntries();
+      const tempRoot = await mkdtemp(path.join(tmpdir(), "livp-"));
+
+      let imagePath: string | undefined;
+      let videoPath: string | undefined;
+
+      for (const e of entries) {
+        if (e.isDirectory) continue;
+        const lower = e.entryName.toLowerCase();
+        // Detect types
+        if (/(\.jpe?g|\.png|\.heic|\.heif)$/.test(lower)) {
+          const out = path.join(tempRoot, path.basename(e.entryName));
+          await writeFile(out, e.getData());
+          imagePath = out;
+        } else if (/(\.mp4|\.mov|\.hevc|\.webm|\.m4v)$/.test(lower)) {
+          const out = path.join(tempRoot, path.basename(e.entryName));
+          await writeFile(out, e.getData());
+          videoPath = out;
+        } else {
+          // Extract unknown files as well
+          const out = path.join(tempRoot, path.basename(e.entryName));
+          await writeFile(out, e.getData());
+        }
+      }
+
+      return {
+        success: true,
+        tempDir: tempRoot,
+        imagePath,
+        videoPath,
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("decode-livp failed:", message);
+      return { success: false, error: message };
+    }
+  });
+
+  // Select any directory
+  ipcMain.handle("select-directory", async () => {
+    if (!mainWindow) throw new Error("Main window not available");
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ["openDirectory"],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  // Batch extract videos from all .livp files in a directory
+  ipcMain.handle(
+    "batch-extract-livp",
+    async (
+      _event,
+      dir: string,
+    ): Promise<{
+      success: boolean;
+      processed: number;
+      extracted: number;
+      errors: { file: string; error: string }[];
+    }> => {
+      const errors: { file: string; error: string }[] = [];
+      let processed = 0;
+      let extracted = 0;
+      try {
+        const names = await readdir(dir);
+        for (const name of names) {
+          if (!name.toLowerCase().endsWith(".livp")) continue;
+          processed += 1;
+          const full = path.join(dir, name);
+          try {
+            const buf = await readFile(full);
+            const zip = new AdmZip(buf);
+            const entries = zip.getEntries();
+            const videoEntry = entries.find((e) =>
+              /\.(mp4|mov|hevc|webm|m4v)$/i.test(e.entryName),
+            );
+            if (!videoEntry) {
+              errors.push({ file: name, error: "No video track found" });
+              continue;
+            }
+            const data = videoEntry.getData();
+            const vidExtMatch = /\.[^.]+$/.exec(videoEntry.entryName);
+            const vidExt = vidExtMatch ? vidExtMatch[0].toLowerCase() : ".mp4";
+            const base = path.parse(name).name;
+            const outPath = path.join(dir, `${base}${vidExt}`);
+            await writeFile(outPath, data);
+            extracted += 1;
+          } catch (err) {
+            errors.push({
+              file: name,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+        return { success: true, processed, extracted, errors };
+      } catch (err) {
+        errors.push({
+          file: dir,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return { success: false, processed, extracted, errors };
+      }
+    },
+  );
+  // Get livp- temp usage summary
+  ipcMain.handle(
+    "get-livp-temp-usage",
+    async (): Promise<{
+      success: boolean;
+      totalBytes: number;
+      count: number;
+      items: { path: string; bytes: number }[];
+    }> => {
+      const base = tmpdir();
+      let totalBytes = 0;
+      let count = 0;
+      const items: { path: string; bytes: number }[] = [];
+      let dirents: Array<{ name: string; isDirectory?: () => boolean }> = [];
+      try {
+        dirents = (await readdir(base, {
+          withFileTypes: true,
+        } as any)) as unknown as Array<{
+          name: string;
+          isDirectory?: () => boolean;
+        }>;
+      } catch {
+        return { success: true, totalBytes: 0, count: 0, items: [] };
+      }
+      for (const d of dirents) {
+        if (!d.isDirectory?.()) continue;
+        const name: string = d.name;
+        if (!name.startsWith("livp-")) continue;
+        const full = path.join(base, name);
+        const bytes = await safeDirSize(full);
+        items.push({ path: full, bytes });
+        totalBytes += bytes;
+        count += 1;
+      }
+      return { success: true, totalBytes, count, items };
+    },
+  );
+
+  // Clean livp- temp directories
+  ipcMain.handle(
+    "clean-livp-temp",
+    async (): Promise<{
+      success: boolean;
+      freedBytes: number;
+      removedCount: number;
+    }> => {
+      const base = tmpdir();
+      let removedCount = 0;
+      let freedBytes = 0;
+      let dirents: Array<{ name: string; isDirectory?: () => boolean }> = [];
+      try {
+        dirents = (await readdir(base, {
+          withFileTypes: true,
+        } as any)) as unknown as Array<{
+          name: string;
+          isDirectory?: () => boolean;
+        }>;
+      } catch {
+        return { success: true, freedBytes: 0, removedCount: 0 };
+      }
+      for (const d of dirents) {
+        if (!d.isDirectory?.()) continue;
+        const name: string = d.name;
+        if (!name.startsWith("livp-")) continue;
+        const full = path.join(base, name);
+        const bytes = await safeDirSize(full);
+        try {
+          // Try rm if available
+          await rm(full, { recursive: true, force: true });
+          removedCount += 1;
+          freedBytes += bytes;
+        } catch {
+          // ignore deletion errors
+        }
+      }
+      return { success: true, freedBytes, removedCount };
+    },
+  );
 };
 
 // Register custom protocol for serving local video files
@@ -492,7 +756,7 @@ const registerLocalVideoProtocol = () => {
         const mimeType = mimeTypes[ext] || "application/octet-stream";
 
         // Return the file stream with appropriate headers
-        return new Response(fileStream as any, {
+        return new Response(fileStream as unknown as ReadableStream, {
           headers: {
             "Content-Type": mimeType,
             "Accept-Ranges": "bytes",
@@ -507,11 +771,106 @@ const registerLocalVideoProtocol = () => {
   });
 };
 
+// Register custom protocol for serving local image files
+const registerLocalImageProtocol = () => {
+  protocol.handle("local-image", (request) => {
+    // Expecting: local-image://file?path=<absolute%20path>
+    const searchIndex = request.url.indexOf("path=");
+    const encoded =
+      searchIndex >= 0 ? request.url.substring(searchIndex + 5) : "";
+    const decodedPath = decodeURIComponent(encoded);
+
+    if (existsSync(decodedPath)) {
+      const ext = path.extname(decodedPath).toLowerCase();
+      const imageExtensions = [
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".bmp",
+        ".svg",
+        ".heic",
+        ".heif",
+      ];
+
+      if (imageExtensions.includes(ext)) {
+        const fileStream = createReadStream(decodedPath);
+
+        const mimeTypes: { [key: string]: string } = {
+          ".png": "image/png",
+          ".jpg": "image/jpeg",
+          ".jpeg": "image/jpeg",
+          ".gif": "image/gif",
+          ".webp": "image/webp",
+          ".bmp": "image/bmp",
+          ".svg": "image/svg+xml",
+          ".heic": "image/heic",
+          ".heif": "image/heif",
+        };
+
+        const mimeType = mimeTypes[ext] || "application/octet-stream";
+
+        return new Response(fileStream as unknown as ReadableStream, {
+          headers: {
+            "Content-Type": mimeType,
+            "Accept-Ranges": "bytes",
+          },
+        });
+      }
+      return new Response(null, { status: 400 });
+    }
+    return new Response(null, { status: 400 });
+  });
+};
+
+// Helper to normalize an extension string like ".jpg" or "jpg"
+function normalizeExt(ext: string): string {
+  if (!ext) return "";
+  return ext.startsWith(".") ? ext : `.${ext}`;
+}
+
+async function safeDirSize(p: string): Promise<number> {
+  try {
+    const s = await stat(p);
+    if (s.isFile()) return s.size;
+  } catch {
+    return 0;
+  }
+  let total = 0;
+  let dirents: Array<{ name: string; isDirectory?: () => boolean }> = [];
+  try {
+    dirents = (await readdir(p, {
+      withFileTypes: true,
+    } as any)) as unknown as Array<{
+      name: string;
+      isDirectory?: () => boolean;
+    }>;
+  } catch {
+    return 0;
+  }
+  for (const d of dirents) {
+    const full = path.join(p, d.name);
+    if (d.isDirectory?.()) {
+      total += await safeDirSize(full);
+    } else {
+      try {
+        const s = await stat(full);
+        total += s.size;
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return total;
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on("ready", () => {
   registerLocalVideoProtocol();
+  registerLocalImageProtocol();
   createWindow();
   setupIpcHandlers();
 });

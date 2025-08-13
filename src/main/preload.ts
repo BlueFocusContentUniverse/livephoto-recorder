@@ -57,4 +57,47 @@ contextBridge.exposeInMainWorld("electronAPI", {
     mimeType: string;
     metadata?: Record<string, string>;
   }) => ipcRenderer.invoke("upload-recording", data),
+  // LIVP helpers
+  selectLivpFile: () =>
+    ipcRenderer.invoke("select-livp-file") as Promise<string | null>,
+  saveLivpDialog: (suggestedName?: string) =>
+    ipcRenderer.invoke("save-livp-dialog", suggestedName) as Promise<
+      string | null
+    >,
+  encodeLivp: (payload: {
+    image: { data: ArrayBuffer; extension: string };
+    video: { data: ArrayBuffer; extension: string };
+    outputPath?: string;
+  }) => ipcRenderer.invoke("encode-livp", payload),
+  decodeLivp: (livpPath: string) =>
+    ipcRenderer.invoke("decode-livp", livpPath) as Promise<{
+      success: boolean;
+      tempDir?: string;
+      imagePath?: string;
+      videoPath?: string;
+      manifest?: unknown;
+      error?: string;
+    }>,
+  getLivpTempUsage: () =>
+    ipcRenderer.invoke("get-livp-temp-usage") as Promise<{
+      success: boolean;
+      totalBytes: number;
+      count: number;
+      items: { path: string; bytes: number }[];
+    }>,
+  cleanLivpTemp: () =>
+    ipcRenderer.invoke("clean-livp-temp") as Promise<{
+      success: boolean;
+      freedBytes: number;
+      removedCount: number;
+    }>,
+  selectDirectory: () =>
+    ipcRenderer.invoke("select-directory") as Promise<string | null>,
+  batchExtractLivp: (dir: string) =>
+    ipcRenderer.invoke("batch-extract-livp", dir) as Promise<{
+      success: boolean;
+      processed: number;
+      extracted: number;
+      errors: { file: string; error: string }[];
+    }>,
 });

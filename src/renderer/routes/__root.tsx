@@ -32,6 +32,12 @@ export const Route = createRootRoute({
               >
                 批量生成
               </Link>
+              <Link
+                to={"/livp"}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 [&.active]:bg-blue-700"
+              >
+                LIVP 工具
+              </Link>
             </div>
           </nav>
           <main className="bg-white p-6 rounded-lg shadow">

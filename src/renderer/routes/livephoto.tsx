@@ -1,3 +1,4 @@
+import { fixWebmDuration } from "@fix-webm-duration/fix";
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import * as LivePhotosKit from "livephotoskit";
 import React, { useEffect, useRef, useState } from "react";
@@ -36,6 +37,7 @@ function LivePhotoPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const autoStopTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number | null>(null);
 
   const startScreenCapture = async () => {
     try {
@@ -46,7 +48,7 @@ function LivePhotoPage() {
         video: {
           width: { ideal: 1920 },
           height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
+          frameRate: { ideal: 60 },
         },
       });
 
@@ -84,7 +86,7 @@ function LivePhotoPage() {
 
       const mediaRecorder = new MediaRecorder(streamRef.current, {
         mimeType: "video/webm;codecs=h264",
-        videoBitsPerSecond: 8000000, // 8Mbps
+        videoBitsPerSecond: 10000000, // 10Mbps
       });
 
       mediaRecorderRef.current = mediaRecorder;
@@ -96,44 +98,38 @@ function LivePhotoPage() {
       };
 
       mediaRecorder.onstop = async () => {
-        const blob = new Blob(recordedChunksRef.current, {
+        const rawBlob = new Blob(recordedChunksRef.current, {
           type: "video/webm",
         });
 
-        // Create download link
-        // const url = URL.createObjectURL(blob);
-        // const a = document.createElement("a");
-        // a.href = url;
-        // a.download = `livephoto-recording-${Date.now()}.webm`;
-        // a.click();
-        // URL.revokeObjectURL(url);
-
-        // Upload to S3-compatible OSS via main process
         try {
-          if (window.electronAPI?.uploadRecording) {
-            const arrayBuffer = await blob.arrayBuffer();
-            const result = await window.electronAPI.uploadRecording({
-              arrayBuffer,
-              filename: `livephoto-recording-${Date.now()}.webm`,
-              mimeType: "video/webm",
-              metadata: {
-                source: "livephoto-export",
-              },
-            });
-            if (!result.success) {
-              console.error("Upload failed:", result.error);
-            } else {
-              console.log("Uploaded fileId:", result.fileId);
-              // Notify main window that export is complete
-              try {
-                await window.electronAPI.notifyExportComplete();
-              } catch (e) {
-                console.error("Failed to notify export completion:", e);
-              }
-            }
-          }
+          const durationMs = startTimeRef.current
+            ? Date.now() - startTimeRef.current
+            : undefined;
+          const fixedBlob = durationMs
+            ? await fixWebmDuration(rawBlob, durationMs)
+            : rawBlob;
+
+          // // Create download link
+          // const url = URL.createObjectURL(fixedBlob);
+          // const a = document.createElement("a");
+          // a.href = url;
+          // a.download = `livephoto-recording-${Date.now()}.webm`;
+          // a.click();
+          // URL.revokeObjectURL(url);
+
+          await uploadToOSS(fixedBlob);
         } catch (e) {
-          console.error("Upload error:", e);
+          // Fallback to raw blob if fixing fails
+          // const url = URL.createObjectURL(rawBlob);
+          // const a = document.createElement("a");
+          // a.href = url;
+          // a.download = `livephoto-recording-${Date.now()}.webm`;
+          // a.click();
+          // URL.revokeObjectURL(url);
+          // console.error("Failed to fix WebM duration:", e);
+
+          await uploadToOSS(rawBlob);
         }
 
         // Close the export window after recording stops
@@ -142,7 +138,8 @@ function LivePhotoPage() {
         }
       };
 
-      mediaRecorder.start(1000); // Capture data every second
+      mediaRecorder.start(10000); // Capture data every 10 seconds
+      startTimeRef.current = Date.now();
       setIsRecording(true);
       setError(null);
 
@@ -164,6 +161,37 @@ function LivePhotoPage() {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      startTimeRef.current = null;
+    }
+  };
+
+  const uploadToOSS = async (blob: Blob) => {
+    // Upload to S3-compatible OSS via main process
+    try {
+      if (window.electronAPI?.uploadRecording) {
+        const arrayBuffer = await blob.arrayBuffer();
+        const result = await window.electronAPI.uploadRecording({
+          arrayBuffer,
+          filename: `livephoto-recording-${Date.now()}.webm`,
+          mimeType: "video/webm",
+          metadata: {
+            source: "livephoto-export",
+          },
+        });
+        if (!result.success) {
+          console.error("Upload failed:", result.error);
+        } else {
+          console.log("Uploaded fileId:", result.fileId);
+          // Notify main window that export is complete
+          try {
+            await window.electronAPI.notifyExportComplete();
+          } catch (e) {
+            console.error("Failed to notify export completion:", e);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Upload error:", e);
     }
   };
 
@@ -172,10 +200,10 @@ function LivePhotoPage() {
     const autoStartCapture = async () => {
       await startScreenCapture();
 
-      // Calculate recording duration: video duration + 2 seconds, minimum 5 seconds
+      // Calculate recording duration: video duration + 3 seconds, minimum 4 seconds
       const recordingDuration = videoDuration
-        ? Math.max(videoDuration + 2, 5)
-        : 5;
+        ? Math.max(videoDuration + 3, 3)
+        : 4;
 
       // Start recording after a short delay
       setTimeout(() => {
@@ -185,7 +213,7 @@ function LivePhotoPage() {
         autoStopTimerRef.current = setTimeout(() => {
           stopScreenCapture();
         }, recordingDuration * 1000);
-      }, 1000);
+      }, 500);
     };
 
     // Auto-start when component mounts

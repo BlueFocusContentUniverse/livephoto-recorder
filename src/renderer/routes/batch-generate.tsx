@@ -64,29 +64,36 @@ function BatchGeneratePage() {
           );
 
           // Create an image object URL from base64 to serve the image asset
-          const imageUrl = base64ToObjectUrl(
+          const imageObjectUrl = base64ToObjectUrl(
             thumb.thumbnailBase64,
             thumb.mimeType,
           );
           const videoUrl = `local-video://file?path=${encodeURIComponent(current.path)}`;
 
           // Try to estimate duration lightly (we can omit; export window will default to minimum)
-          let videoDuration: number | undefined;
-          try {
-            videoDuration = await getVideoDuration(videoUrl);
-          } catch {
-            // ignore
-          }
+          // Measure image dimensions
+          const { width: imageWidth, height: imageHeight } =
+            await getImageSize(imageObjectUrl);
+          // Measure video duration
+          const videoDuration = await getVideoDuration(videoUrl).catch(
+            () => undefined,
+          );
 
           await window.electronAPI.exportLivePhoto({
-            imageUrl,
+            imageUrl: imageObjectUrl,
             videoUrl,
             ...(videoDuration ? { videoDuration } : {}),
+            imageWidth,
+            imageHeight,
           });
           // Wait until export window notifies completion
           await waitForExportComplete();
+
+          // Wait 2 seconds before next loop
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await window.electronAPI.notifyExportComplete();
           // Revoke the temporary image URL after exporting
-          URL.revokeObjectURL(imageUrl);
+          URL.revokeObjectURL(imageObjectUrl);
 
           setItems((prev) =>
             prev.map((it, idx) =>
@@ -214,6 +221,19 @@ function getVideoDuration(videoUrl: string): Promise<number> {
       reject(new Error("Failed to load video for duration"));
       video.remove();
     };
+  });
+}
+
+// Helper to get image size
+function getImageSize(url: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.src = "";
+    };
+    img.onerror = () => reject(new Error("Failed to load image for size"));
+    img.src = url;
   });
 }
 

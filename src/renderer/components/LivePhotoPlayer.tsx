@@ -37,7 +37,6 @@ export const LivePhotoPlayer: React.FC<LivePhotoPlayerProps> = ({
             photoSrc: imageUrl,
             videoSrc: videoUrl,
             playbackStyle: "full",
-            showsNativeControls: true,
           },
         );
 

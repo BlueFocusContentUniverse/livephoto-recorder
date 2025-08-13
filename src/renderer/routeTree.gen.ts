@@ -9,10 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as LivpRouteImport } from './routes/livp'
 import { Route as LivephotoRouteImport } from './routes/livephoto'
 import { Route as BatchGenerateRouteImport } from './routes/batch-generate'
 import { Route as IndexRouteImport } from './routes/index'
 
+const LivpRoute = LivpRouteImport.update({
+  id: '/livp',
+  path: '/livp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LivephotoRoute = LivephotoRouteImport.update({
   id: '/livephoto',
   path: '/livephoto',
@@ -33,34 +39,45 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/batch-generate': typeof BatchGenerateRoute
   '/livephoto': typeof LivephotoRoute
+  '/livp': typeof LivpRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/batch-generate': typeof BatchGenerateRoute
   '/livephoto': typeof LivephotoRoute
+  '/livp': typeof LivpRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/batch-generate': typeof BatchGenerateRoute
   '/livephoto': typeof LivephotoRoute
+  '/livp': typeof LivpRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/batch-generate' | '/livephoto'
+  fullPaths: '/' | '/batch-generate' | '/livephoto' | '/livp'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/batch-generate' | '/livephoto'
-  id: '__root__' | '/' | '/batch-generate' | '/livephoto'
+  to: '/' | '/batch-generate' | '/livephoto' | '/livp'
+  id: '__root__' | '/' | '/batch-generate' | '/livephoto' | '/livp'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BatchGenerateRoute: typeof BatchGenerateRoute
   LivephotoRoute: typeof LivephotoRoute
+  LivpRoute: typeof LivpRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/livp': {
+      id: '/livp'
+      path: '/livp'
+      fullPath: '/livp'
+      preLoaderRoute: typeof LivpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/livephoto': {
       id: '/livephoto'
       path: '/livephoto'
@@ -89,6 +106,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BatchGenerateRoute: BatchGenerateRoute,
   LivephotoRoute: LivephotoRoute,
+  LivpRoute: LivpRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

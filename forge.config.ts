@@ -12,7 +12,7 @@ const config: ForgeConfig = {
     asar: true,
     icon: "./images/icon",
     extraResource: ["./ffmpeg/", ".env"],
-    appVersion: "1.1.0",
+    appVersion: "1.2.1",
   },
   rebuildConfig: {},
   makers: [
